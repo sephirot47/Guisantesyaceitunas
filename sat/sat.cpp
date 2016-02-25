@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <vector>
+#include <map>
 
 using namespace std;
 
@@ -23,6 +24,14 @@ vector<int> modelStack; //{0,3,54,6,1, 0,9,7,65,19
 vector< vector<Clause> > litToClausesWhereIsPositive;
 vector< vector<Clause> > litToClausesWhereIsNegative;
 
+
+//For the lit i, it contains the index in which is contained into the
+//litsOrderedByFrequencyDesc vector
+map<int,int> litToLitIndexInFreqVector;
+//<Literal, Frequency>
+vector< pair<int,int> > litsOrderedByFrequencyDesc;
+
+
 int propagations = 0;
 int decisions = 0;
 
@@ -39,6 +48,10 @@ void printClause(const Clause &c)
     cout << c[c.size()-1] << ")" << endl;
 }
 
+bool sortByFreq(const pair<int,int>& left, const pair<int,int>& right)
+{
+    return left.second > right.second;
+}
 
 void readClauses()
 {
@@ -55,6 +68,14 @@ void readClauses()
   cin >> aux >> numVars >> numClauses;
   litToClausesWhereIsPositive.resize(numVars);
   litToClausesWhereIsNegative.resize(numVars);
+
+  litsOrderedByFrequencyDesc.resize(numVars);
+  for(uint i = 0; i < numVars; ++i)
+  {
+      litsOrderedByFrequencyDesc[i].first = (i+1); //lit
+      litsOrderedByFrequencyDesc[i].second = 0;    //freq=0
+  }
+
   clauses.resize(numClauses);
 
   // Read clauses
@@ -72,33 +93,24 @@ void readClauses()
     {
         lit = lits[k];
 
-        /*
-        litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
-        litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
-        //*/
-        //*
+        litsOrderedByFrequencyDesc[abs(lit)-1].second++; //Increase frequency
+
         if(lit > 0) litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
         else        litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
-        //*/
     }
-  }    
+  }
+
+  std::sort(litsOrderedByFrequencyDesc.begin(),
+            litsOrderedByFrequencyDesc.end(),
+            sortByFreq);
 
   /*
-  for(uint lit = 0; lit < litToClausesWhereIsPositive.size(); ++lit)
+  for(uint i = 0; i < litsOrderedByFrequencyDesc.size(); ++i)
   {
-      cout << "Clauses where " << (lit+1) << " is positive:" << endl;
-      for(uint i = 0; i < litToClausesWhereIsPositive[lit].size(); ++i)
-      {
-         printClause(litToClausesWhereIsPositive[lit][i]);
-      }
-
-      cout << "Clauses where " << (lit+1) << " is negative:" << endl;
-      for(uint i = 0; i < litToClausesWhereIsNegative[lit].size(); ++i)
-      {
-          printClause(litToClausesWhereIsNegative[lit][i]);
-      }
+      int lit = litsOrderedByFrequencyDesc[i].first;
+      //litToLitIndexInFreqVector[lit] = i; //add the lit and the index to the map
   }
-  //*/
+  */
 }
 
 int currentValueInModel(int lit)
@@ -209,6 +221,17 @@ void backtrack()
 // Heuristic for finding the next decision literal:
 int getNextDecisionLiteral()
 {
+   // cerr << "------------" << endl;
+  //*
+  for(uint i = 0; i < numVars; ++i)
+  {
+     // cerr << litsOrderedByFrequencyDesc[i].first << ":" <<  litsOrderedByFrequencyDesc[i].second << endl;
+      if(currentValueInModel(litsOrderedByFrequencyDesc[i].first) == UNDEF)
+          return litsOrderedByFrequencyDesc[i].first;
+  }
+  //*/
+
+  /*
   for (uint i = 1; i <= numVars; ++i)  // stupid heuristic:
   {
     if (model[i] == UNDEF)
@@ -216,6 +239,7 @@ int getNextDecisionLiteral()
         return i;
     } // returns first UNDEF var, positively
   }
+  //*/
 
   return 0; // reurns 0 when all literals are defined
 }
