@@ -1,5 +1,5 @@
 #!/bin/bash
-make clean && make
+qmake && make clean && make
 if [ ! $? == 0 ]; then
 	exit -1
 fi

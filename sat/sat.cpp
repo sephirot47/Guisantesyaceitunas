@@ -72,18 +72,18 @@ void readClauses()
     {
         lit = lits[k];
 
-        //*
+        /*
         litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
         litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
         //*/
-        /*
+        //*
         if(lit > 0) litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
         else        litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
         //*/
     }
   }    
 
-  if(false) {
+  /*
   for(uint lit = 0; lit < litToClausesWhereIsPositive.size(); ++lit)
   {
       cout << "Clauses where " << (lit+1) << " is positive:" << endl;
@@ -97,7 +97,8 @@ void readClauses()
       {
           printClause(litToClausesWhereIsNegative[lit][i]);
       }
-  }}
+  }
+  //*/
 }
 
 int currentValueInModel(int lit)
@@ -137,7 +138,7 @@ bool propagateGivesConflict()
         ++indexOfNextLitToPropagate;
         ++propagations;
 
-        const vector<Clause> &clausesToCheckForConflict = (currentValueInModel(lit) == TRUE) ?
+        const vector<Clause> &clausesToCheckForConflict = (currentValueInModel(abs(lit)) == TRUE) ?
                                                            litToClausesWhereIsNegative[abs(lit)-1] :
                                                            litToClausesWhereIsPositive[abs(lit)-1];
 
