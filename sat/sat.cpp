@@ -31,6 +31,10 @@ map<int,int> litToLitIndexInFreqVector;
 //<Literal, Frequency>
 vector< pair<int,int> > litsOrderedByFrequencyDesc;
 
+//For the lit i, it contains the number of times
+vector<int> litsConflictFrequency;
+
+//ORDENAR CLAUSULES PER NOMBRE DE VARIABLES DEFINIDES
 
 int propagations = 0;
 int decisions = 0;
@@ -75,6 +79,8 @@ void readClauses()
       litsOrderedByFrequencyDesc[i].first = (i+1); //lit
       litsOrderedByFrequencyDesc[i].second = 0;    //freq=0
   }
+
+  litsConflictFrequency.resize(numVars, 0); //freq=0
 
   clauses.resize(numClauses);
 
@@ -167,10 +173,7 @@ bool propagateGivesConflict()
             for(uint j = 0; !someLitTrue && j < LITS_PER_CLAUSE; ++j)
             {
                 const int jval = currentValueInModel(clausesToCheckForConflict[i][j]);
-                if(jval == TRUE)
-                {
-                    someLitTrue = true;
-                }
+                if(jval == TRUE) someLitTrue = true;
                 else if (jval == UNDEF)
                 {
                     ++numUndefs;
@@ -182,8 +185,11 @@ bool propagateGivesConflict()
             {
                 if(numUndefs == 0)
                 {
-                   // cout << "CONFLICT! in clause: " << &(clausesToCheckForConflict[i]) << endl;
-                    return true; // conflict! all lits false
+                    //CONFLICT! All literals are false!
+                    litsConflictFrequency[abs(clausesToCheckForConflict[i][0])-1]++;
+                    litsConflictFrequency[abs(clausesToCheckForConflict[i][1])-1]++;
+                    litsConflictFrequency[abs(clausesToCheckForConflict[i][2])-1]++;
+                    return true;
                 }
                 if(numUndefs == 1)
                 {
@@ -221,23 +227,32 @@ void backtrack()
 // Heuristic for finding the next decision literal:
 int getNextDecisionLiteral()
 {
-   // cerr << "------------" << endl;
+  ++decisions;
+
   //*
+  int litMax = 0;
+  int fMax = 0;
   for(uint i = 0; i < numVars; ++i)
   {
-     // cerr << litsOrderedByFrequencyDesc[i].first << ":" <<  litsOrderedByFrequencyDesc[i].second << endl;
-      if(currentValueInModel(litsOrderedByFrequencyDesc[i].first) == UNDEF)
-          return litsOrderedByFrequencyDesc[i].first;
+      int lit = i+1;
+      if(currentValueInModel(lit) == UNDEF)
+      {
+          if(litsConflictFrequency[i] > fMax)
+          {
+              litMax = lit;
+              fMax = litsConflictFrequency[i];
+          }
+      }
   }
+
+  return litMax;
   //*/
 
   /*
-  for (uint i = 1; i <= numVars; ++i)  // stupid heuristic:
+  for(uint i = 0; i < numVars; ++i)
   {
-    if (model[i] == UNDEF)
-    {
-        return i;
-    } // returns first UNDEF var, positively
+      if(currentValueInModel(litsOrderedByFrequencyDesc[i].first) == UNDEF)
+          return litsOrderedByFrequencyDesc[i].first;
   }
   //*/
 
@@ -250,7 +265,7 @@ void checkmodel()
   {
     bool someTrue = false;
     uint j;
-    for (j = 0; not someTrue and j < clauses[i].size(); ++j)
+    for (j = 0; not someTrue and j < LITS_PER_CLAUSE; ++j)
     {
       someTrue = (currentValueInModel(clauses[i][j]) == TRUE);
     }
@@ -281,6 +296,7 @@ int main()
   indexOfNextLitToPropagate = 0;  
   decisionLevel = 0;
 
+  /*
   // Take care of initial unit clauses, if any
   for (uint i = 0; i < numClauses; ++i)
     if (clauses[i].size() == 1)
@@ -290,7 +306,9 @@ int main()
       if (val == FALSE) {cout << "UNSATISFIABLE" << endl; return 10;}
       else if (val == UNDEF) setLiteralToTrue(lit);
     }
-  
+  */
+
+
   // DPLL algorithm
   while (true)
   {
@@ -314,7 +332,6 @@ int main()
     }
 
     // start new decision level:
-    ++decisions;
     ++decisionLevel;
     ++indexOfNextLitToPropagate;
     modelStack.push_back(0);       // push mark indicating new DL
