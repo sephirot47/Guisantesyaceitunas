@@ -18,23 +18,18 @@ uint numClauses;
 vector<Clause> clauses; //{l12, l59, l3, ...} all positive
 
 vector<int> model;      //{l0:FALSE, l1:FALSE, l2:TRUE, l3:UNDEF, l4:TRUE, l5:UNDEF, l6:FALSE, ...}
+uint modelStackCurrentSize = 0;
 vector<int> modelStack; //{0,3,54,6,1, 0,9,7,65,19
 
 //For the lit i, it contains all the clauses where it appears
 vector< vector<Clause> > litToClausesWhereIsPositive;
 vector< vector<Clause> > litToClausesWhereIsNegative;
 
-
-//For the lit i, it contains the index in which is contained into the
-//litsOrderedByFrequencyDesc vector
-map<int,int> litToLitIndexInFreqVector;
 //<Literal, Frequency>
 vector< pair<int,int> > litsOrderedByFrequencyDesc;
 
 //For the lit i, it contains the number of times
-vector<int> litsConflictFrequency;
-
-//ORDENAR CLAUSULES PER NOMBRE DE VARIABLES DEFINIDES
+vector<int> litsHeuristic;
 
 int propagations = 0;
 int decisions = 0;
@@ -67,6 +62,8 @@ void readClauses()
     c = cin.get();
   }  
 
+  //modelStack.resize(numVars * 3);
+
   // Read "cnf numVars numClauses"
   string aux;
   cin >> aux >> numVars >> numClauses;
@@ -80,7 +77,7 @@ void readClauses()
       litsOrderedByFrequencyDesc[i].second = 0;    //freq=0
   }
 
-  litsConflictFrequency.resize(numVars, 0); //freq=0
+  litsHeuristic.resize(numVars, 0); //freq=0
 
   clauses.resize(numClauses);
 
@@ -109,27 +106,11 @@ void readClauses()
   std::sort(litsOrderedByFrequencyDesc.begin(),
             litsOrderedByFrequencyDesc.end(),
             sortByFreq);
-
-  /*
-  for(uint i = 0; i < litsOrderedByFrequencyDesc.size(); ++i)
-  {
-      int lit = litsOrderedByFrequencyDesc[i].first;
-      //litToLitIndexInFreqVector[lit] = i; //add the lit and the index to the map
-  }
-  */
 }
 
-int currentValueInModel(int lit)
+inline int currentValueInModel(int lit)
 {
-  if (lit >= 0)
-  {
-      return model[lit];
-  }
-  else
-  {
-    if (model[-lit] == UNDEF) return UNDEF;
-    else return 1 - model[-lit];
-  }
+    return (lit >= 0) ? model[lit] : (model[-lit] == UNDEF ? UNDEF : (1-model[-lit]));
 }
 
 
@@ -170,6 +151,7 @@ bool propagateGivesConflict()
             int numUndefs = 0;
             int lastLitUndef = 0;
             bool someLitTrue = false;
+
             for(uint j = 0; !someLitTrue && j < LITS_PER_CLAUSE; ++j)
             {
                 const int jval = currentValueInModel(clausesToCheckForConflict[i][j]);
@@ -186,12 +168,9 @@ bool propagateGivesConflict()
                 if(numUndefs == 0)
                 {
                     //CONFLICT! All literals are false!
-                    litsConflictFrequency[abs(clausesToCheckForConflict[i][0])-1]++;
-                    litsConflictFrequency[abs(clausesToCheckForConflict[i][1])-1]++;
-                    litsConflictFrequency[abs(clausesToCheckForConflict[i][2])-1]++;
                     return true;
                 }
-                if(numUndefs == 1)
+                else if(numUndefs == 1)
                 {
                     setLiteralToTrue(lastLitUndef);
                 }
@@ -223,41 +202,65 @@ void backtrack()
   setLiteralToTrue(-lit);  // reverse last decision
 }
 
-
-// Heuristic for finding the next decision literal:
 int getNextDecisionLiteral()
 {
-  ++decisions;
-
-  //*
-  int litMax = 0;
-  int fMax = 0;
-  for(uint i = 0; i < numVars; ++i)
+  if(decisionLevel == 0)
   {
-      int lit = i+1;
-      if(currentValueInModel(lit) == UNDEF)
+      for(uint i = 0; i < numVars; ++i)
       {
-          if(litsConflictFrequency[i] > fMax)
-          {
-              litMax = lit;
-              fMax = litsConflictFrequency[i];
-          }
+          if(currentValueInModel(litsOrderedByFrequencyDesc[i].first) == UNDEF)
+              return litsOrderedByFrequencyDesc[i].first;
       }
   }
 
-  return litMax;
-  //*/
-
-  /*
-  for(uint i = 0; i < numVars; ++i)
+  ++decisions;
+  vector<int> litScores(numVars+1,0);
+  for(uint i = 0; i < numClauses; ++i)
   {
-      if(currentValueInModel(litsOrderedByFrequencyDesc[i].first) == UNDEF)
-          return litsOrderedByFrequencyDesc[i].first;
-  }
-  //*/
+    uint countFalse = 0;
+    uint countUndef = 0;
+    int lastFalseIndex = -1;
+    for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
+    {
+      if (currentValueInModel(clauses[i][j]) == FALSE)
+      {
+        ++countFalse;
+        lastFalseIndex = j;
+      }
+      else if (currentValueInModel(clauses[i][j]) == UNDEF)
+      {
+        ++countUndef;
+      }
+    }
 
+    if (countFalse == 1 and countUndef == 2)
+    {
+      for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
+      {
+        if (j == lastFalseIndex) continue;
+        int lit = clauses[i][j];
+        ++litScores[lit > 0 ? lit : -lit];
+      }
+    }
+  }
+
+  int maxScore = 0;
+  int maxLit = -1;
+  for (uint i = 1; i <= numVars; ++i)
+  {
+    if (litScores[i] > maxScore)
+    {
+      maxScore = litScores[i];
+      maxLit = i;
+    }
+  }
+  if (maxLit > 0) return maxLit;
+
+  for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
+    if (model[i] == UNDEF) return i;  // returns first UNDEF var, positively
   return 0; // reurns 0 when all literals are defined
 }
+
 
 void checkmodel()
 {
@@ -295,19 +298,6 @@ int main()
   model.resize(numVars+1,UNDEF);
   indexOfNextLitToPropagate = 0;  
   decisionLevel = 0;
-
-  /*
-  // Take care of initial unit clauses, if any
-  for (uint i = 0; i < numClauses; ++i)
-    if (clauses[i].size() == 1)
-    {
-      int lit = clauses[i][0];
-      int val = currentValueInModel(lit);
-      if (val == FALSE) {cout << "UNSATISFIABLE" << endl; return 10;}
-      else if (val == UNDEF) setLiteralToTrue(lit);
-    }
-  */
-
 
   // DPLL algorithm
   while (true)
