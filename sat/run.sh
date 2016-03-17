@@ -5,6 +5,7 @@ if [ ! $? == 0 ]; then
 fi
 
 for f in inputs/*
-do
-	echo -e "$f:\t$(./sat < $f)"
+do 
+	echo "$f:\t"
+	./sat < $f
 done

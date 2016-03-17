@@ -30,6 +30,7 @@ vector< vector<int> > litToClauses;
 //<Literal, Frequency>
 vector< pair<int,int> > litsOrderedByFrequencyDesc;
 
+vector< vector<bool> >  litToRetraClausesB; //lit to a list of index retraclauses where it is the culprit of retraclausing
 vector< list<int> >  litToRetraClauses; //lit to a list of index retraclauses where it is the culprit of retraclausing
 
 //For the lit i, it contains the number of times
@@ -86,6 +87,7 @@ void readClauses()
   litsHeuristic.resize(numVars, 0); //freq=0
   litScores.resize(numVars+1, 0);
   litToRetraClauses  = vector< list<int> >(numVars+1, list<int>());
+  litToRetraClausesB = vector< vector<bool> >(numVars+1, vector<bool>(numClauses, false));
 
   clauses.resize(numClauses);
 
@@ -143,7 +145,8 @@ bool isRetraclause(const Clause &clause)
     {
         const int jval = currentValueInModel(clause[j]);
         if (jval == UNDEF) ++numUndefs;
-        else ++numFalses;
+        else if(jval == FALSE) ++numFalses;
+        else return false;
     }
 
    return (numFalses == 1 && numUndefs == 2); //Is it a retraclause?
@@ -155,12 +158,14 @@ bool propagateGivesConflict()
     {
         //Propagate last decision
         int lit = modelStack[indexOfNextLitToPropagate];
+        int alit = abs(lit);
         ++indexOfNextLitToPropagate;
         ++propagations;
-
-        const vector<int> &clausesToCheckForConflict = (currentValueInModel(abs(lit)) == TRUE) ?
-                                                        litToClausesWhereIsNegative[abs(lit)] :
-                                                        litToClausesWhereIsPositive[abs(lit)];
+/*
+        const vector<int> &clausesToCheckForConflict = (currentValueInModel(alit) == TRUE) ?
+                                                        litToClausesWhereIsNegative[alit] :
+                                                        litToClausesWhereIsPositive[alit];*/
+        const vector<int> &clausesToCheckForConflict = litToClauses[alit];
 
         //The decision is to make lit=TRUE/FALSE, so lets check for conflict in
         //the clauses where it is apporting nothing (where is negative/positive)
@@ -168,16 +173,14 @@ bool propagateGivesConflict()
         //so there there wont be any conflict
         for(uint i = 0; i < clausesToCheckForConflict.size(); ++i)
         {
-            int numFalses = 0;
-            int numUndefs = 0;
-            int lastLitUndef = 0;
+            int numUndefs = 0, numFalses = 0, numTrues = 0, lastLitUndef = 0;
             bool someLitTrue = false;
             int cc = clausesToCheckForConflict[i];
 
             for(uint j = 0; !someLitTrue && j < LITS_PER_CLAUSE; ++j)
             {
                 const int jval = currentValueInModel(clauses[cc][j]);
-                if(jval == TRUE) someLitTrue = true;
+                if(jval == TRUE) { ++numTrues; someLitTrue = true; }
                 else if (jval == UNDEF)
                 {
                     ++numUndefs;
@@ -186,31 +189,43 @@ bool propagateGivesConflict()
                 else ++numFalses;
             }
 
-            if(isRetraclause(clauses[cc]))
+            int lit0 = abs(clauses[cc][0]), lit1 = abs(clauses[cc][1]), lit2 = abs(clauses[cc][2]);
+
+            //cout << litToRetraClauses[alit].size() << endl;
+            bool wasRetra = litToRetraClausesB[lit0][cc] || litToRetraClausesB[lit1][cc] || litToRetraClausesB[lit2][cc];
+            bool isRetra = isRetraclause(clauses[cc]);
+            if(!wasRetra && isRetra)
             {
-                //++litScores[abs(lit)];
-                litToRetraClauses[abs(lit)].push_back(cc);
+                if(lit0 != alit) ++litScores[lit0]; //increase score to the two retrapartners
+                if(lit1 != alit) ++litScores[lit1]; //increase score to the two retrapartners
+                if(lit2 != alit) ++litScores[lit2]; //increase score to the two retrapartners
+
+                litToRetraClauses[alit].push_back(cc);
+                litToRetraClausesB[alit][cc] = true; //retraculprit
             }
-            else
+
+
+            if(wasRetra && !isRetra) // if it was retra before, but now it is not...
             {
-                for(uint j = 0; j < LITS_PER_CLAUSE; ++j)
-                {
-                    const int jlit = abs(clauses[cc][j]);
+                int litCulprit = -1; //Locate the retraculprit of its retra before, and substract score to its retrapartners
+                if     (litToRetraClausesB[lit0][cc]) litCulprit = lit0;
+                else if(litToRetraClausesB[lit1][cc]) litCulprit = lit1;
+                else if(litToRetraClausesB[lit2][cc]) litCulprit = lit2;
+                else cout << "THIS SHOULD NEVER HAPPEN!" << endl;
 
-                    //cout << litToRetraClauses[jlit].size() << endl;
-                    for(auto it = litToRetraClauses[jlit].begin(); it != litToRetraClauses[jlit].end(); ++it)
+                if(lit0 != litCulprit) --litScores[lit0]; //decrease score to the two retrapartners
+                if(lit1 != litCulprit) --litScores[lit1]; //decrease score to the two retrapartners
+                if(lit2 != litCulprit) --litScores[lit2]; //decrease score to the two retrapartners
+
+                litToRetraClausesB[litCulprit][cc] = false; //retraculprit
+
+                //Take retraclause out of litCulprit list
+                for(auto it = litToRetraClauses[litCulprit].begin(); it != litToRetraClauses[litCulprit].end(); ++it)
+                {   //Take retraclause out of lit list
+                    if(cc == *it)
                     {
-                        if(i == *it)
-                        {
-                            for(uint k = 0; k < LITS_PER_CLAUSE; ++k)
-                            {   //Decrease heuristic for the not two retraclause responsibles
-                                if(clauses[cc][k] != jlit)
-                                    --litScores[abs(lit)];
-                            }
-
-                            litToRetraClauses[jlit].erase(it); //jlit is not a retraclause responsible anymore
-                            break;
-                        }
+                        litToRetraClauses[litCulprit].erase(it);
+                        break;
                     }
                 }
             }
@@ -242,33 +257,37 @@ void backtrack()
   while (modelStack[i] != 0) // 0 is the DL mark
   {
     lit = modelStack[i];
-    int lastLitValue = model[abs(lit)];
+    int alit = abs(lit);
+    int lastLitValue = model[alit];
 
     //For every clause, change temporary the model value,
-    // to check if its a clause where it was retraclause,
+    // to check if its a clause which was retraclause,
     // and after the change it isnt. In case this happens,
     // substract score!
-    for(int j = 0; j < litToClauses[abs(lit)].size(); ++j)
+    for(int j = 0; j < litToClauses[alit].size(); ++j)
     {
-        int cc = litToClauses[abs(lit)][i];
-        bool wasRetraclause = isRetraclause( clauses[cc] );
+        model[alit] = lastLitValue; //necessary, to undo the UNDEF change of every iteration
 
-        model[abs(lit)] = UNDEF; //change, check if the change undoes retraclause in case it was
+        int cc = litToClauses[alit][j]; //cout << "lit: " << abs(lit) << ", j: " << j << ", current clause: " << cc << endl;
+        bool wasRetra = isRetraclause( clauses[cc] );
 
-        if(wasRetraclause && !isRetraclause( clauses[cc] ))
+        model[alit] = UNDEF; //change, check if the change undoes retraclause in case it was
+
+        if(wasRetra && !isRetraclause(clauses[cc]))
         {
+            //Locate the culprit
             for(uint k = 0; k < LITS_PER_CLAUSE; ++k)
             {
                 const int klit = abs(clauses[cc][k]);
 
                 for(auto it = litToRetraClauses[klit].begin(); it != litToRetraClauses[klit].end(); ++it)
                 {
-                    if(i == *it)
+                    if(j == *it)
                     {
                         for(uint m = 0; m < LITS_PER_CLAUSE; ++m)
                         {   //Decrease heuristic for the not two retraclause responsibles
                             if(clauses[cc][m] != klit)
-                                --litScores[abs(lit)];
+                                --litScores[alit];
                         }
 
                         litToRetraClauses[klit].erase(it); //jlit is not a retraclause responsible anymore
@@ -277,12 +296,9 @@ void backtrack()
                 }
             }
         }
-
-        model[abs(lit)] = lastLitValue; //change
     }
 
-    model[abs(lit)] = UNDEF; //change
-
+    model[alit] = UNDEF; //backtrack it
     modelStack.pop_back();
     --i;
   }
@@ -307,20 +323,23 @@ int getNextDecisionLiteral()
       }
   }
 
-  int maxScore = 0;
+  int maxScore = -1;
   int maxLit = -1;
   for (uint i = 1; i <= numVars; ++i)
   {
-    if (litScores[i] > maxScore)
+    if(litScores[i] < 0) { cout << "LIT SCORE NEGATIVE, SHOULD ENVER HAPPEN" << endl; }
+
+    if (currentValueInModel(i) == UNDEF &&
+        litScores[i] > maxScore)
     {
       maxScore = litScores[i];
       maxLit = i;
     }
   }
-  if (maxLit > 0) return maxLit;
+  if (maxLit >= 1) return maxLit;
 
-  for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
-    if (model[i] == UNDEF) return i;  // returns first UNDEF var, positively
+  //for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
+  //  if (model[i] == UNDEF) return i;  // returns first UNDEF var, positively
   return 0; // reurns 0 when all literals are defined
 }
 
@@ -377,6 +396,7 @@ int main()
     }
 
     int decisionLit = getNextDecisionLiteral();
+    //cout << "decision: " << decisionLit << endl;
     if (decisionLit == 0)
     {
         checkmodel();
