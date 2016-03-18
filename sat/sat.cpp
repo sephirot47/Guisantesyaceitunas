@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <algorithm>
 #include <vector>
-#include <list>
 #include <map>
 
 using namespace std;
@@ -23,45 +22,29 @@ uint modelStackCurrentSize = 0;
 vector<int> modelStack; //{0,3,54,6,1, 0,9,7,65,19
 
 //For the lit i, it contains all the clauses where it appears
-vector< vector<int> > litToClausesWhereIsPositive;
-vector< vector<int> > litToClausesWhereIsNegative;
-vector< vector<int> > litToClauses;
+vector< vector<Clause> > litToClausesWhereIsPositive;
+vector< vector<Clause> > litToClausesWhereIsNegative;
 
 //<Literal, Frequency>
 vector< pair<int,int> > litsOrderedByFrequencyDesc;
 
-vector< vector<bool> >  litToRetraClausesB; //lit to a list of index retraclauses where it is the culprit of retraclausing
-vector< list<int> >  litToRetraClauses; //lit to a list of index retraclauses where it is the culprit of retraclausing
-
 //For the lit i, it contains the number of times
 vector<int> litsHeuristic;
-vector<bool> retraclauses;
 
 int propagations = 0;
 int decisions = 0;
 
-vector<int> litScores;
-
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
 
-inline int currentValueInModel(int lit);
-
 void printClause(const Clause &c)
-{/*
+{
     cout << "clause:(";
     for (uint i = 0; i < c.size()-1; ++i)
     {
         cout << c[i] << " || ";
     }
     cout << c[c.size()-1] << ")" << endl;
-    */
-    cout << "c (";
-    for (uint i = 0; i < c.size()-1; ++i)
-    {
-        cout << currentValueInModel(c[i]) << " || ";
-    }
-    cout << currentValueInModel(c[c.size()-1]) << ")" << endl;
 }
 
 bool sortByFreq(const pair<int,int>& left, const pair<int,int>& right)
@@ -84,27 +67,18 @@ void readClauses()
   // Read "cnf numVars numClauses"
   string aux;
   cin >> aux >> numVars >> numClauses;
-  litToClausesWhereIsPositive.resize(numVars+1);
-  litToClausesWhereIsNegative.resize(numVars+1);
-  litToClauses.resize(numVars+1);
+  litToClausesWhereIsPositive.resize(numVars);
+  litToClausesWhereIsNegative.resize(numVars);
 
-  litsOrderedByFrequencyDesc = vector< pair<int,int> >(numVars+1, pair<int,int>(0,0));
-  for(uint i = 1; i <= numVars; ++i)
+  litsOrderedByFrequencyDesc.resize(numVars);
+  for(uint i = 0; i < numVars; ++i)
   {
-      litsOrderedByFrequencyDesc[i].first = i;  //lit
-      litsOrderedByFrequencyDesc[i].second = 0; //freq=0
+      litsOrderedByFrequencyDesc[i].first = (i+1); //lit
+      litsOrderedByFrequencyDesc[i].second = 0;    //freq=0
   }
 
-  litToClausesWhereIsPositive.resize(numVars+1);
-  litToClausesWhereIsNegative.resize(numVars+1);
-  litToClauses.resize(numVars+1);
   litsHeuristic.resize(numVars, 0); //freq=0
 
-  litScores.resize(numVars+1, 0);
-  litToRetraClauses  = vector< list<int> >(numVars+1, list<int>());
-  litToRetraClausesB = vector< vector<bool> >(numVars+1, vector<bool>(numClauses, false));
-
-  retraclauses = vector<bool>(numClauses, false);
   clauses.resize(numClauses);
 
   // Read clauses
@@ -122,11 +96,10 @@ void readClauses()
     {
         lit = lits[k];
 
-        litsOrderedByFrequencyDesc[abs(lit)].second++; //Increase frequency
+        litsOrderedByFrequencyDesc[abs(lit)-1].second++; //Increase frequency
 
-        if(lit > 0) litToClausesWhereIsPositive[lit].push_back(i);
-        else        litToClausesWhereIsNegative[abs(lit)].push_back(i);
-        litToClauses[abs(lit)].push_back(i);
+        if(lit > 0) litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
+        else        litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
     }
   }
 
@@ -154,19 +127,6 @@ void setLiteralToTrue(int lit)
   }
 }
 
-inline bool isRetraclause(int i)
-{
-    uint countFalse = 0, countUndef = 0;
-    for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
-    {
-      const int v = currentValueInModel(clauses[i][j]);
-      if (v == FALSE) ++countFalse;
-      else if (v == UNDEF) ++countUndef;
-      else return false;
-    }
-
-    return countFalse == 1; //return (countFalse == 1 && countUndef == 2);
-}
 
 bool propagateGivesConflict()
 {
@@ -174,32 +134,34 @@ bool propagateGivesConflict()
     {
         //Propagate last decision
         int lit = modelStack[indexOfNextLitToPropagate];
-        int alit = abs(lit);
         ++indexOfNextLitToPropagate;
         ++propagations;
 
-        const vector<int> &clausesToCheckForConflict = litToClauses[abs(lit)]   ;
+        const vector<Clause> &clausesToCheckForConflict = (currentValueInModel(abs(lit)) == TRUE) ?
+                                                           litToClausesWhereIsNegative[abs(lit)-1] :
+                                                           litToClausesWhereIsPositive[abs(lit)-1];
+
+        //The decision is to make lit=TRUE/FALSE, so lets check for conflict in
+        //the clauses where it is apporting nothing (where is negative/positive)
+        //as the other ones are surely giving TRUE because of this decission
+        //so there there wont be any conflict
         const uint S = clausesToCheckForConflict.size();
         for(uint i = 0; i < S; ++i)
         {
-            int numUndefs = 0, numFalses = 0;
+            int numUndefs = 0;
             int lastLitUndef = 0;
             bool someLitTrue = false;
-            int cc = clausesToCheckForConflict[i];
 
             for(uint j = 0; !someLitTrue && j < LITS_PER_CLAUSE; ++j)
             {
-                const int jval = currentValueInModel(clauses[cc][j]);
+                const int jval = currentValueInModel(clausesToCheckForConflict[i][j]);
                 if(jval == TRUE) someLitTrue = true;
                 else if (jval == UNDEF)
                 {
                     ++numUndefs;
-                    lastLitUndef = clauses[cc][j];
+                    lastLitUndef = clausesToCheckForConflict[i][j];
                 }
-                else ++numFalses;
             }
-
-            retraclauses[cc] = (numFalses == 1 && numUndefs == 2);
 
             if (!someLitTrue) //for each clause
             {
@@ -214,7 +176,9 @@ bool propagateGivesConflict()
                 }
             }
         }
+
     }
+
     return false;
 }
 
@@ -226,17 +190,7 @@ void backtrack()
   while (modelStack[i] != 0) // 0 is the DL mark
   {
     lit = modelStack[i];
-    int alit = abs(lit);
-    model[alit] = UNDEF; //backtrack it
-
-    const uint S = litToClauses[alit].size();
-    for(uint ci = 0; ci < S; ++ci)
-    {
-        int cc = litToClauses[alit][ci];
-
-        retraclauses[cc] = isRetraclause(cc);
-    }
-
+    model[abs(lit)] = UNDEF;
     modelStack.pop_back();
     --i;
   }
@@ -250,8 +204,6 @@ void backtrack()
 
 int getNextDecisionLiteral()
 {
-  ++decisions;
-
   if(decisionLevel == 0)
   {
       for(uint i = 0; i < numVars; ++i)
@@ -261,21 +213,39 @@ int getNextDecisionLiteral()
       }
   }
 
-  int clausesChecked = 0;
+  ++decisions;
   vector<int> litScores(numVars+1,0);
-
   for(uint i = 0; i < numClauses; ++i)
   {
-    if(!retraclauses[i]) continue;
+    uint countFalse = 0;
+    uint countUndef = 0;
+    int lastFalseIndex = -1;
     for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
     {
-        const int lit = clauses[i][j];
-        if (currentValueInModel(lit) == UNDEF)
-            ++litScores[abs(lit)];
+      if (currentValueInModel(clauses[i][j]) == FALSE)
+      {
+        ++countFalse;
+        lastFalseIndex = j;
+      }
+      else if (currentValueInModel(clauses[i][j]) == UNDEF)
+      {
+        ++countUndef;
+      }
+    }
+
+    if (countFalse == 1 and countUndef == 2)
+    {
+      for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
+      {
+        if (j == lastFalseIndex) continue;
+        int lit = clauses[i][j];
+        ++litScores[lit > 0 ? lit : -lit];
+      }
     }
   }
 
-  int maxLit = -1, maxScore = 0;
+  int maxScore = 0;
+  int maxLit = -1;
   for (uint i = 1; i <= numVars; ++i)
   {
     if (litScores[i] > maxScore)
@@ -284,16 +254,11 @@ int getNextDecisionLiteral()
       maxLit = i;
     }
   }
+  if (maxLit > 0) return maxLit;
 
-  if(maxLit <= 0)
-  {
-      for(uint i = 1; i < numVars+1; ++i)
-      {
-          if(currentValueInModel(litsOrderedByFrequencyDesc[i].first) == UNDEF)
-              return litsOrderedByFrequencyDesc[i].first;
-      }
-  }
-  return maxLit;
+  for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
+    if (model[i] == UNDEF) return i;  // returns first UNDEF var, positively
+  return 0; // reurns 0 when all literals are defined
 }
 
 
@@ -314,7 +279,7 @@ void checkmodel()
       cout << endl;
       exit(1);
     }
-  }
+  }  
 }
 
 void printTimePropsAndDecisions(clock_t start)
@@ -349,9 +314,6 @@ int main()
     }
 
     int decisionLit = getNextDecisionLiteral();
-
-    //cout << decisionLit << endl;
-    //cout << "decision: " << decisionLit << endl;
     if (decisionLit == 0)
     {
         checkmodel();
