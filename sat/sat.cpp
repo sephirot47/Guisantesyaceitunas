@@ -23,13 +23,8 @@ uint modelStackCurrentSize = 0;
 vector<int> modelStack; //{0,3,54,6,1, 0,9,7,65,19
 
 //For the lit i, it contains all the clauses where it appears
-<<<<<<< HEAD
 vector< vector<int> > litToClausesWhereIsPositive;
 vector< vector<int> > litToClausesWhereIsNegative;
-=======
-vector< vector<Clause> > litToClausesWhereIsPositive;
-vector< vector<Clause> > litToClausesWhereIsNegative;
->>>>>>> new_branch_name
 vector< vector<int> > litToClauses;
 
 //<Literal, Frequency>
@@ -80,15 +75,11 @@ void readClauses()
   // Read "cnf numVars numClauses"
   string aux;
   cin >> aux >> numVars >> numClauses;
-<<<<<<< HEAD
-  litsOrderedByFrequencyDesc.resize(numVars);
-=======
   litToClausesWhereIsPositive.resize(numVars+1);
   litToClausesWhereIsNegative.resize(numVars+1);
   litToClauses.resize(numVars+1);
 
   litsOrderedByFrequencyDesc.resize(numVars+1);
->>>>>>> new_branch_name
   for(uint i = 0; i < numVars; ++i)
   {
       litsOrderedByFrequencyDesc[i].first = (i+1); //lit
@@ -99,14 +90,12 @@ void readClauses()
   litToClausesWhereIsNegative.resize(numVars+1);
   litToClauses.resize(numVars+1);
   litsHeuristic.resize(numVars, 0); //freq=0
-<<<<<<< HEAD
+
   litScores.resize(numVars+1, 0);
   litToRetraClauses  = vector< list<int> >(numVars+1, list<int>());
   litToRetraClausesB = vector< vector<bool> >(numVars+1, vector<bool>(numClauses, false));
 
-=======
   retraclauses = vector<bool>(numClauses, false);
->>>>>>> new_branch_name
   clauses.resize(numClauses);
 
   // Read clauses
@@ -126,13 +115,8 @@ void readClauses()
 
         litsOrderedByFrequencyDesc[abs(lit)].second++; //Increase frequency
 
-<<<<<<< HEAD
-        if(lit > 0) litToClausesWhereIsPositive[abs(lit)].push_back(i);
+        if(lit > 0) litToClausesWhereIsPositive[lit].push_back(i);
         else        litToClausesWhereIsNegative[abs(lit)].push_back(i);
-=======
-        if(lit > 0) litToClausesWhereIsPositive[lit].push_back(clauses[i]);
-        else        litToClausesWhereIsNegative[abs(lit)].push_back(clauses[i]);
->>>>>>> new_branch_name
         litToClauses[abs(lit)].push_back(i);
     }
   }
@@ -161,20 +145,6 @@ void setLiteralToTrue(int lit)
   }
 }
 
-<<<<<<< HEAD
-bool isRetraclause(const Clause &clause)
-{
-    int numFalses = 0, numUndefs = 0;
-    for(uint j = 0; j < LITS_PER_CLAUSE; ++j)
-    {
-        const int jval = currentValueInModel(clause[j]);
-        if (jval == UNDEF) ++numUndefs;
-        else if(jval == FALSE) ++numFalses;
-        else return false;
-    }
-
-   return (numFalses == 1 && numUndefs == 2); //Is it a retraclause?
-=======
 bool isRetraclause(int i)
 {
     Clause c = clauses[i];
@@ -188,7 +158,6 @@ bool isRetraclause(int i)
     }
 
     return (countFalse == 1 && countUndef == 2);
->>>>>>> new_branch_name
 }
 
 bool propagateGivesConflict()
@@ -200,92 +169,27 @@ bool propagateGivesConflict()
         int alit = abs(lit);
         ++indexOfNextLitToPropagate;
         ++propagations;
-<<<<<<< HEAD
-/*
-        const vector<int> &clausesToCheckForConflict = (currentValueInModel(alit) == TRUE) ?
-                                                        litToClausesWhereIsNegative[alit] :
-                                                        litToClausesWhereIsPositive[alit];*/
-        const vector<int> &clausesToCheckForConflict = litToClauses[alit];
-=======
->>>>>>> new_branch_name
 
         //The decision is to make lit=TRUE/FALSE, so lets check for conflict in
         //the clauses where it is apporting nothing (where is negative/positive)
         //as the other ones are surely giving TRUE because of this decission
         //so there there wont be any conflict
-<<<<<<< HEAD
-        for(uint i = 0; i < clausesToCheckForConflict.size(); ++i)
-        {
-            int numUndefs = 0, numFalses = 0, numTrues = 0, lastLitUndef = 0;
-=======
         const uint S = litToClauses[abs(lit)].size();
         for(uint i = 0; i < S; ++i)
         {
             int numUndefs = 0, numFalses = 0;
             int lastLitUndef = 0;
->>>>>>> new_branch_name
             bool someLitTrue = false;
-            int cc = clausesToCheckForConflict[i];
+            int cc = litToClauses[abs(lit)][i];
 
             for(uint j = 0; !someLitTrue && j < LITS_PER_CLAUSE; ++j)
             {
-<<<<<<< HEAD
-                const int jval = currentValueInModel(clauses[cc][j]);
-                if(jval == TRUE) { ++numTrues; someLitTrue = true; }
-                else if (jval == UNDEF)
-                {
-                    ++numUndefs;
-                    lastLitUndef = clauses[cc][j];
-                }
-                else ++numFalses;
-            }
-
-            int lit0 = abs(clauses[cc][0]), lit1 = abs(clauses[cc][1]), lit2 = abs(clauses[cc][2]);
-
-            //cout << litToRetraClauses[alit].size() << endl;
-            bool wasRetra = litToRetraClausesB[lit0][cc] || litToRetraClausesB[lit1][cc] || litToRetraClausesB[lit2][cc];
-            bool isRetra = isRetraclause(clauses[cc]);
-            if(!wasRetra && isRetra)
-            {
-                if(lit0 != alit) ++litScores[lit0]; //increase score to the two retrapartners
-                if(lit1 != alit) ++litScores[lit1]; //increase score to the two retrapartners
-                if(lit2 != alit) ++litScores[lit2]; //increase score to the two retrapartners
-
-                litToRetraClauses[alit].push_back(cc);
-                litToRetraClausesB[alit][cc] = true; //retraculprit
-            }
-
-
-            if(wasRetra && !isRetra) // if it was retra before, but now it is not...
-            {
-                int litCulprit = -1; //Locate the retraculprit of its retra before, and substract score to its retrapartners
-                if     (litToRetraClausesB[lit0][cc]) litCulprit = lit0;
-                else if(litToRetraClausesB[lit1][cc]) litCulprit = lit1;
-                else if(litToRetraClausesB[lit2][cc]) litCulprit = lit2;
-                else cout << "THIS SHOULD NEVER HAPPEN!" << endl;
-
-                if(lit0 != litCulprit) --litScores[lit0]; //decrease score to the two retrapartners
-                if(lit1 != litCulprit) --litScores[lit1]; //decrease score to the two retrapartners
-                if(lit2 != litCulprit) --litScores[lit2]; //decrease score to the two retrapartners
-
-                litToRetraClausesB[litCulprit][cc] = false; //retraculprit
-
-                //Take retraclause out of litCulprit list
-                for(auto it = litToRetraClauses[litCulprit].begin(); it != litToRetraClauses[litCulprit].end(); ++it)
-                {   //Take retraclause out of lit list
-                    if(cc == *it)
-                    {
-                        litToRetraClauses[litCulprit].erase(it);
-                        break;
-                    }
-=======
                 const int jval = currentValueInModel(clauses[litToClauses[abs(lit)][i]][j]);
                 if(jval == TRUE) someLitTrue = true;
                 else if (jval == UNDEF)
                 {
                     ++numUndefs;
                     lastLitUndef = clauses[litToClauses[abs(lit)][i]][j];
->>>>>>> new_branch_name
                 }
                 else ++numFalses;
             }
@@ -389,10 +293,6 @@ int getNextDecisionLiteral()
       }
   }
 
-<<<<<<< HEAD
-  int maxScore = -1;
-  int maxLit = -1;
-=======
   //check only for UNDEF vars
   //check only for clauses marked as Retra
 
@@ -433,30 +333,6 @@ int getNextDecisionLiteral()
   }
 
   return maxLit;
-
-  /*
->>>>>>> new_branch_name
-  for (uint i = 1; i <= numVars; ++i)
-  {
-    if(litScores[i] < 0) { cout << "LIT SCORE NEGATIVE, SHOULD ENVER HAPPEN" << endl; }
-
-    if (currentValueInModel(i) == UNDEF &&
-        litScores[i] > maxScore)
-    {
-      maxScore = litScores[i];
-      maxLit = i;
-    }
-  }
-<<<<<<< HEAD
-  if (maxLit >= 1) return maxLit;
-=======
-  if (maxLit > 0)
->>>>>>> new_branch_name
-
-  //for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
-  //  if (model[i] == UNDEF) return i;  // returns first UNDEF var, positively
-  return 0; // reurns 0 when all literals are defined
-  */
 }
 
 
@@ -477,7 +353,7 @@ void checkmodel()
       cout << endl;
       exit(1);
     }
-  }  
+  }
 }
 
 void printTimePropsAndDecisions(clock_t start)
