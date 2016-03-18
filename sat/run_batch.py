@@ -14,7 +14,7 @@ def run(cmd,file):
     return elapsed
 
 for file in sorted(os.listdir('inputs/')):
-    if file.startswith('vars-250'):
+    if file.startswith('vars-'):
 	print file
 
 #	print '========================'
