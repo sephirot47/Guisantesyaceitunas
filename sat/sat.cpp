@@ -45,14 +45,23 @@ vector<int> litScores;
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
 
+inline int currentValueInModel(int lit);
+
 void printClause(const Clause &c)
-{
+{/*
     cout << "clause:(";
     for (uint i = 0; i < c.size()-1; ++i)
     {
         cout << c[i] << " || ";
     }
     cout << c[c.size()-1] << ")" << endl;
+    */
+    cout << "c (";
+    for (uint i = 0; i < c.size()-1; ++i)
+    {
+        cout << currentValueInModel(c[i]) << " || ";
+    }
+    cout << currentValueInModel(c[c.size()-1]) << ")" << endl;
 }
 
 bool sortByFreq(const pair<int,int>& left, const pair<int,int>& right)
@@ -79,11 +88,11 @@ void readClauses()
   litToClausesWhereIsNegative.resize(numVars+1);
   litToClauses.resize(numVars+1);
 
-  litsOrderedByFrequencyDesc.resize(numVars+1);
-  for(uint i = 0; i < numVars; ++i)
+  litsOrderedByFrequencyDesc = vector< pair<int,int> >(numVars+1, pair<int,int>(0,0));
+  for(uint i = 1; i <= numVars; ++i)
   {
-      litsOrderedByFrequencyDesc[i].first = (i+1); //lit
-      litsOrderedByFrequencyDesc[i].second = 0;    //freq=0
+      litsOrderedByFrequencyDesc[i].first = i;  //lit
+      litsOrderedByFrequencyDesc[i].second = 0; //freq=0
   }
 
   litToClausesWhereIsPositive.resize(numVars+1);
@@ -145,19 +154,18 @@ void setLiteralToTrue(int lit)
   }
 }
 
-bool isRetraclause(int i)
+inline bool isRetraclause(int i)
 {
-    Clause c = clauses[i];
     uint countFalse = 0, countUndef = 0;
     for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
     {
-      const int v = currentValueInModel(c[j]);
+      const int v = currentValueInModel(clauses[i][j]);
       if (v == FALSE) ++countFalse;
       else if (v == UNDEF) ++countUndef;
-      else break;
+      else return false;
     }
 
-    return (countFalse == 1 && countUndef == 2);
+    return countFalse == 1; //return (countFalse == 1 && countUndef == 2);
 }
 
 bool propagateGivesConflict()
@@ -170,29 +178,28 @@ bool propagateGivesConflict()
         ++indexOfNextLitToPropagate;
         ++propagations;
 
-        //The decision is to make lit=TRUE/FALSE, so lets check for conflict in
-        //the clauses where it is apporting nothing (where is negative/positive)
-        //as the other ones are surely giving TRUE because of this decission
-        //so there there wont be any conflict
-        const uint S = litToClauses[abs(lit)].size();
+        const vector<int> &clausesToCheckForConflict = litToClauses[abs(lit)]   ;
+        const uint S = clausesToCheckForConflict.size();
         for(uint i = 0; i < S; ++i)
         {
             int numUndefs = 0, numFalses = 0;
             int lastLitUndef = 0;
             bool someLitTrue = false;
-            int cc = litToClauses[abs(lit)][i];
+            int cc = clausesToCheckForConflict[i];
 
             for(uint j = 0; !someLitTrue && j < LITS_PER_CLAUSE; ++j)
             {
-                const int jval = currentValueInModel(clauses[litToClauses[abs(lit)][i]][j]);
+                const int jval = currentValueInModel(clauses[cc][j]);
                 if(jval == TRUE) someLitTrue = true;
                 else if (jval == UNDEF)
                 {
                     ++numUndefs;
-                    lastLitUndef = clauses[litToClauses[abs(lit)][i]][j];
+                    lastLitUndef = clauses[cc][j];
                 }
                 else ++numFalses;
             }
+
+            retraclauses[cc] = (numFalses == 1 && numUndefs == 2);
 
             if (!someLitTrue) //for each clause
             {
@@ -206,8 +213,6 @@ bool propagateGivesConflict()
                     setLiteralToTrue(lastLitUndef);
                 }
             }
-
-            retraclauses[litToClauses[abs(lit)][i]] = (numFalses == 1 && numUndefs == 2);
         }
     }
     return false;
@@ -222,55 +227,18 @@ void backtrack()
   {
     lit = modelStack[i];
     int alit = abs(lit);
-    int lastLitValue = model[alit];
-
-    //For every clause, change temporary the model value,
-    // to check if its a clause which was retraclause,
-    // and after the change it isnt. In case this happens,
-    // substract score!
-    for(int j = 0; j < litToClauses[alit].size(); ++j)
-    {
-        model[alit] = lastLitValue; //necessary, to undo the UNDEF change of every iteration
-
-        int cc = litToClauses[alit][j]; //cout << "lit: " << abs(lit) << ", j: " << j << ", current clause: " << cc << endl;
-        bool wasRetra = isRetraclause( clauses[cc] );
-
-        model[alit] = UNDEF; //change, check if the change undoes retraclause in case it was
-
-        if(wasRetra && !isRetraclause(clauses[cc]))
-        {
-            //Locate the culprit
-            for(uint k = 0; k < LITS_PER_CLAUSE; ++k)
-            {
-                const int klit = abs(clauses[cc][k]);
-
-                for(auto it = litToRetraClauses[klit].begin(); it != litToRetraClauses[klit].end(); ++it)
-                {
-                    if(j == *it)
-                    {
-                        for(uint m = 0; m < LITS_PER_CLAUSE; ++m)
-                        {   //Decrease heuristic for the not two retraclause responsibles
-                            if(clauses[cc][m] != klit)
-                                --litScores[alit];
-                        }
-
-                        litToRetraClauses[klit].erase(it); //jlit is not a retraclause responsible anymore
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
     model[alit] = UNDEF; //backtrack it
-    modelStack.pop_back();
-    --i;
 
-    const uint S = litToClauses[abs(lit)].size();
+    const uint S = litToClauses[alit].size();
     for(uint ci = 0; ci < S; ++ci)
     {
-        retraclauses[litToClauses[abs(lit)][ci]] = isRetraclause(litToClauses[abs(lit)][ci]);
+        int cc = litToClauses[alit][ci];
+
+        retraclauses[cc] = isRetraclause(cc);
     }
+
+    modelStack.pop_back();
+    --i;
   }
 
   // at this point, lit is the last decision
@@ -293,45 +261,38 @@ int getNextDecisionLiteral()
       }
   }
 
-  //check only for UNDEF vars
-  //check only for clauses marked as Retra
-
-  int maxLit = 0;
-  int maxScore = -1;
-  vector<int> litScores(numVars+1,0);
-  //cout << numClauses << endl;
   int clausesChecked = 0;
+  vector<int> litScores(numVars+1,0);
+
   for(uint i = 0; i < numClauses; ++i)
   {
     if(!retraclauses[i]) continue;
-    ++clausesChecked;
-
     for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
     {
-        if (currentValueInModel(clauses[i][j]) == UNDEF)
-        {
-            const int lit = abs(clauses[i][j]);
-            if(++litScores[lit] > maxScore)
-            {
-                maxLit = lit;
-                maxScore = litScores[lit];
-            }
-        }
+        const int lit = clauses[i][j];
+        if (currentValueInModel(lit) == UNDEF)
+            ++litScores[abs(lit)];
     }
   }
 
-  //cout << clausesChecked << "/" << numClauses << endl;
-  //cout << maxScore << endl;
+  int maxLit = -1, maxScore = 0;
+  for (uint i = 1; i <= numVars; ++i)
+  {
+    if (litScores[i] > maxScore)
+    {
+      maxScore = litScores[i];
+      maxLit = i;
+    }
+  }
+
   if(maxLit <= 0)
   {
-     // cout << "BAD" << endl;
-      for(uint i = 0; i < numVars; ++i)
+      for(uint i = 1; i < numVars+1; ++i)
       {
           if(currentValueInModel(litsOrderedByFrequencyDesc[i].first) == UNDEF)
               return litsOrderedByFrequencyDesc[i].first;
       }
   }
-
   return maxLit;
 }
 
@@ -388,6 +349,8 @@ int main()
     }
 
     int decisionLit = getNextDecisionLiteral();
+
+    //cout << decisionLit << endl;
     //cout << "decision: " << decisionLit << endl;
     if (decisionLit == 0)
     {
