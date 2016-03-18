@@ -24,15 +24,19 @@ vector<int> modelStack; //{0,3,54,6,1, 0,9,7,65,19
 //For the lit i, it contains all the clauses where it appears
 vector< vector<Clause> > litToClausesWhereIsPositive;
 vector< vector<Clause> > litToClausesWhereIsNegative;
+vector< vector<Clause> > litToClauses;
 
 //<Literal, Frequency>
 vector< pair<int,int> > litsOrderedByFrequencyDesc;
+vector< int > indexsOfLitsOrderedByFrequencyDesc;
 
 //For the lit i, it contains the number of times
 vector<int> litsHeuristic;
 
 int propagations = 0;
 int decisions = 0;
+
+vector<int> litScores;
 
 uint indexOfNextLitToPropagate;
 uint decisionLevel;
@@ -69,7 +73,10 @@ void readClauses()
   cin >> aux >> numVars >> numClauses;
   litToClausesWhereIsPositive.resize(numVars);
   litToClausesWhereIsNegative.resize(numVars);
-
+  litToClauses.resize(numVars);
+  
+  litScores = vector<int>(numVars + 1, 0);
+  
   litsOrderedByFrequencyDesc.resize(numVars);
   for(uint i = 0; i < numVars; ++i)
   {
@@ -100,12 +107,19 @@ void readClauses()
 
         if(lit > 0) litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
         else        litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
+	litToClauses[abs(lit)-1].push_back(clauses[i]);
     }
   }
 
   std::sort(litsOrderedByFrequencyDesc.begin(),
             litsOrderedByFrequencyDesc.end(),
             sortByFreq);
+  
+  indexsOfLitsOrderedByFrequencyDesc.resize(numVars+1, 0);
+  for(int i = 0; i < litsOrderedByFrequencyDesc.size(); ++i)
+  {
+    indexsOfLitsOrderedByFrequencyDesc[litsOrderedByFrequencyDesc[i].first - 1] = i;
+  }
 }
 
 inline int currentValueInModel(int lit)
@@ -114,12 +128,12 @@ inline int currentValueInModel(int lit)
 }
 
 
-void setLiteralToTrue(int lit)
+inline void setLiteralToTrue(int lit)
 {
   modelStack.push_back(lit);
   if (lit > 0)
   {
-      model[lit] = TRUE;
+      model[abs(lit)] = (lit > 0);
   }
   else
   {
@@ -155,12 +169,12 @@ bool propagateGivesConflict()
             for(uint j = 0; !someLitTrue && j < LITS_PER_CLAUSE; ++j)
             {
                 const int jval = currentValueInModel(clausesToCheckForConflict[i][j]);
-                if(jval == TRUE) someLitTrue = true;
-                else if (jval == UNDEF)
+                if (jval == UNDEF)
                 {
                     ++numUndefs;
                     lastLitUndef = clausesToCheckForConflict[i][j];
                 }
+                else if(jval == TRUE) someLitTrue = true;
             }
 
             if (!someLitTrue) //for each clause
@@ -176,9 +190,7 @@ bool propagateGivesConflict()
                 }
             }
         }
-
     }
-
     return false;
 }
 
@@ -213,24 +225,29 @@ int getNextDecisionLiteral()
       }
   }
 
+  int maxScore = 0;
+  int maxLit = -1;
   ++decisions;
-  vector<int> litScores(numVars+1,0);
+  
+  fill(litScores.begin(), litScores.end(), 0);
+  
   for(uint i = 0; i < numClauses; ++i)
   {
-    uint countFalse = 0;
-    uint countUndef = 0;
+    uint countFalse = 0, countUndef = 0;
     int lastFalseIndex = -1;
     for (uint j = 0; j < LITS_PER_CLAUSE; ++j)
     {
-      if (currentValueInModel(clauses[i][j]) == FALSE)
+      const int v = currentValueInModel(clauses[i][j]);
+      if (v == UNDEF)
+      {
+        ++countUndef;
+      }
+      else if (v == FALSE)
       {
         ++countFalse;
         lastFalseIndex = j;
       }
-      else if (currentValueInModel(clauses[i][j]) == UNDEF)
-      {
-        ++countUndef;
-      }
+      else break;
     }
 
     if (countFalse == 1 and countUndef == 2)
@@ -239,25 +256,32 @@ int getNextDecisionLiteral()
       {
         if (j == lastFalseIndex) continue;
         int lit = clauses[i][j];
-        ++litScores[lit > 0 ? lit : -lit];
+        ++litScores[abs(lit)];
       }
     }
   }
 
-  int maxScore = 0;
-  int maxLit = -1;
   for (uint i = 1; i <= numVars; ++i)
   {
-    if (litScores[i] > maxScore)
+    if(currentValueInModel(i) == UNDEF)
     {
-      maxScore = litScores[i];
-      maxLit = i;
+      if (litScores[i] == maxScore)
+      {
+	if(indexsOfLitsOrderedByFrequencyDesc[i-1] <
+	  indexsOfLitsOrderedByFrequencyDesc[maxLit-1]
+	)
+	{
+	  maxLit = i;
+	}
+      }
+      else if (litScores[i] > maxScore)
+      {
+	maxScore = litScores[i];
+	maxLit = i;
+      }
     }
   }
   if (maxLit > 0) return maxLit;
-
-  for (uint i = 1; i <= numVars; ++i) // stupid heuristic:
-    if (model[i] == UNDEF) return i;  // returns first UNDEF var, positively
   return 0; // reurns 0 when all literals are defined
 }
 

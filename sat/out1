@@ -1,0 +1,20 @@
+inputs/vars-250-10.cnf:	
+SATISFIABLE	Time: 0.121455	s	Decisions: 2648   	P/s: 870512
+inputs/vars-250-1.cnf:	
+UNSATISFIABLE	Time: 5.07073	s	Decisions: 136353   	P/s: 1.04759e+06
+inputs/vars-250-2.cnf:	
+UNSATISFIABLE	Time: 6.39429	s	Decisions: 174406   	P/s: 1.071e+06
+inputs/vars-250-3.cnf:	
+SATISFIABLE	Time: 0.156263	s	Decisions: 4191   	P/s: 1.04284e+06
+inputs/vars-250-4.cnf:	
+SATISFIABLE	Time: 4.22254	s	Decisions: 115042   	P/s: 1.07235e+06
+inputs/vars-250-5.cnf:	
+UNSATISFIABLE	Time: 5.92869	s	Decisions: 161724   	P/s: 1.08026e+06
+inputs/vars-250-6.cnf:	
+UNSATISFIABLE	Time: 6.44219	s	Decisions: 173160   	P/s: 1.06164e+06
+inputs/vars-250-7.cnf:	
+SATISFIABLE	Time: 4.89501	s	Decisions: 130038   	P/s: 1.04073e+06
+inputs/vars-250-8.cnf:	
+UNSATISFIABLE	Time: 5.65857	s	Decisions: 151578   	P/s: 1.06364e+06
+inputs/vars-250-9.cnf:	
+SATISFIABLE	Time: 0.610659	s	Decisions: 16154   	P/s: 1.02532e+06
