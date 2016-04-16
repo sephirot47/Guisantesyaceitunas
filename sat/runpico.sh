@@ -6,5 +6,5 @@ fi
 
 for f in inputs/vars*
 do
-	echo -e "$f $(./sat < $f)"
+	echo "$f $(/usr/bin/time -f "%U" $(picosat &>/dev/null < $f))"
 done

@@ -17,7 +17,8 @@ uint numVars;
 uint numClauses;
 vector<Clause> clauses; //{l12, l59, l3, ...} all positive
 
-vector<int> model;      //{l0:FALSE, l1:FALSE, l2:TRUE, l3:UNDEF, l4:TRUE, l5:UNDEF, l6:FALSE, ...}
+//{l0:FALSE, l1:FALSE, l2:TRUE, l3:UNDEF, l4:TRUE, l5:UNDEF, l6:FALSE, ...}
+vector<int> model;      
 uint modelStackCurrentSize = 0;
 vector<int> modelStack; //{0,3,54,6,1, 0,9,7,65,19
 
@@ -29,9 +30,6 @@ vector< vector<Clause> > litToClauses;
 //<Literal, Frequency>
 vector< pair<int,int> > litsOrderedByFrequencyDesc;
 vector< int > indexsOfLitsOrderedByFrequencyDesc;
-
-//For the lit i, it contains the number of times
-vector<int> litsHeuristic;
 
 int propagations = 0;
 int decisions = 0;
@@ -84,8 +82,6 @@ void readClauses()
       litsOrderedByFrequencyDesc[i].second = 0;    //freq=0
   }
 
-  litsHeuristic.resize(numVars, 0); //freq=0
-
   clauses.resize(numClauses);
 
   // Read clauses
@@ -105,8 +101,11 @@ void readClauses()
 
         litsOrderedByFrequencyDesc[abs(lit)-1].second++; //Increase frequency
 
-        if(lit > 0) litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
-        else        litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
+        if(lit > 0) 
+          litToClausesWhereIsPositive[abs(lit)-1].push_back(clauses[i]);
+        else       
+          litToClausesWhereIsNegative[abs(lit)-1].push_back(clauses[i]);
+        
 	litToClauses[abs(lit)-1].push_back(clauses[i]);
     }
   }
@@ -309,20 +308,20 @@ void checkmodel()
 void printTimePropsAndDecisions(clock_t start)
 {
     double timeTaken = ((double)(clock() - start) / CLOCKS_PER_SEC);
-    cout  <<  "\tTime: " << timeTaken << "\ts" <<
-              "\tDecisions: " << decisions << "   "
-              "\tP/s: " << ((double) propagations) / timeTaken << endl;
+    cout << decisions << " " << timeTaken << " " << 
+            propagations << " " <<  
+            ((double) propagations) / timeTaken << endl;
 }
 
 int main()
 {
-  clock_t start = clock();
-
   readClauses(); // reads numVars, numClauses and clauses
   model.resize(numVars+1,UNDEF);
   indexOfNextLitToPropagate = 0;  
   decisionLevel = 0;
 
+  clock_t start = clock();
+  
   // DPLL algorithm
   while (true)
   {
@@ -330,7 +329,7 @@ int main()
     {
       if ( decisionLevel == 0)
       {
-          cout << "UNSATISFIABLE"; printTimePropsAndDecisions(start);
+          cout << "UNSATISFIABLE "; printTimePropsAndDecisions(start);
           return 10;
       }
 
@@ -341,7 +340,7 @@ int main()
     if (decisionLit == 0)
     {
         checkmodel();
-        cout << "SATISFIABLE"; printTimePropsAndDecisions(start);
+        cout << "SATISFIABLE "; printTimePropsAndDecisions(start);
         return 20;
     }
 
